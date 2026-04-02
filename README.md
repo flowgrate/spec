@@ -15,15 +15,41 @@ Your SDK (any language)
     → Go CLI compiles operations to SQL and executes them
 ```
 
-The CLI reads JSON from stdin if piped, otherwise invokes the SDK project:
+The CLI reads JSON from stdin if piped, otherwise invokes the SDK via the `run` command in config:
 
 ```bash
-# piped
+# piped — works with any SDK, no config needed
 dotnet run --project ./Migrations | flowgrate up
+python ./migrations/runner.py | flowgrate up
 
-# direct
-flowgrate up   # CLI calls the SDK itself via config
+# direct — CLI calls the SDK itself using migrations.run from flowgrate.yml
+flowgrate up
 ```
+
+### Config (`flowgrate.yml`)
+
+Generate with `flowgrate init`, then uncomment the `run` line that matches your SDK:
+
+```yaml
+database:
+  url: postgres://user:pass@localhost/mydb
+
+migrations:
+  project: ./Migrations   # for 'flowgrate make' (where to generate files)
+  sdk: csharp             # for 'flowgrate make' (which template)
+
+  # Uncomment the command that invokes your SDK:
+  # run: dotnet run --project ./Migrations
+  # run: python ./Migrations/runner.py
+  # run: php artisan flowgrate:export
+  # run: poetry run python ./Migrations/runner.py
+  # run: bundle exec rake flowgrate:dump
+  # run: docker compose exec sdk dotnet run --project /migrations
+```
+
+If `run` is not set, the CLI falls back to built-in defaults:
+- `sdk: csharp` → `dotnet run --project {project}`
+- `sdk: python` → `python {project}`
 
 ---
 
@@ -258,6 +284,7 @@ your-sdk-runner | flowgrate up
 
 ### SDK requirements checklist
 
+- [ ] Invocable via a single shell command (configurable in `migrations.run`)
 - [ ] Outputs one JSON object per migration to stdout
 - [ ] Migrations are ordered by the timestamp in their filename
 - [ ] All canonical column types are supported
