@@ -37,7 +37,7 @@ database:
 migrations:
   project: ./Migrations   # where migration files live (used by 'flowgrate make')
   sdk: csharp             # csharp | python | any custom value
-  table_case: snake       # snake (default) | camel — affects 'flowgrate make' output
+  table_case: snake       # snake (default) | camel | pascal — affects 'flowgrate make' output
 
   # Explicit invoke command (required for custom SDKs, optional for csharp/python):
   # run: dotnet run --project ./Migrations
@@ -55,6 +55,14 @@ If `run` is not set, the CLI uses built-in defaults:
 - `sdk: csharp` → `dotnet run --project {project}`
 - `sdk: python` → `python {project}`
 - Any other value → `run` is required
+
+`table_case` controls how table and column names are formatted in generated migration files:
+
+| Value | Result for `CreateUserProfilesTable` | Common in |
+|-------|--------------------------------------|-----------|
+| `snake` (default) | `user_profiles` | Python, Ruby, Go |
+| `camel` | `userProfiles` | JavaScript, TypeScript |
+| `pascal` | `UserProfiles` | C#, Java |
 
 ---
 
@@ -318,13 +326,42 @@ Configure in `flowgrate.yml`:
 
 ```yaml
 migrations:
-  sdk: my-sdk
-  run: my-sdk-runner
-  stubs: ./path/to/my-sdk-stubs
-  file_ext: .ext
+  sdk: php
+  run: php artisan flowgrate:export
+  stubs: ./vendor/flowgrate-php/stubs
+  file_ext: .php
+  table_case: snake
 ```
 
 If `stubs` is not set, `flowgrate make` falls back to generating a `.migration` JSON skeleton.
+
+#### Example: PHP stub (`create.tmpl`)
+
+```php
+<?php
+
+use Flowgrate\Migration;
+use Flowgrate\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('{{.Table}}', function (Blueprint $table) {
+            $table->id();
+            // TODO: add columns
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('{{.Table}}');
+    }
+};
+```
+
+This file lives in your SDK package at `stubs/create.tmpl`. Users point `migrations.stubs` at that directory and get Laravel-style PHP files from `flowgrate make CreateUsersTable`.
 
 ### Reference implementations
 
