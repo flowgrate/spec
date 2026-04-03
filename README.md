@@ -28,28 +28,33 @@ flowgrate up
 
 ### Config (`flowgrate.yml`)
 
-Generate with `flowgrate init`, then uncomment the `run` line that matches your SDK:
+Generate with `flowgrate init`, then adjust as needed:
 
 ```yaml
 database:
-  url: postgres://user:pass@localhost/mydb
+  url: postgres://user:pass@localhost/mydb   # postgres:// | mysql:// | sqlite:///
 
 migrations:
-  project: ./Migrations   # for 'flowgrate make' (where to generate files)
-  sdk: csharp             # for 'flowgrate make' (which template)
+  project: ./Migrations   # where migration files live (used by 'flowgrate make')
+  sdk: csharp             # csharp | python | any custom value
+  table_case: snake       # snake (default) | camel — affects 'flowgrate make' output
 
-  # Uncomment the command that invokes your SDK:
+  # Explicit invoke command (required for custom SDKs, optional for csharp/python):
   # run: dotnet run --project ./Migrations
   # run: python ./Migrations/runner.py
+  # run: bundle exec ruby migrations/runner.rb
   # run: php artisan flowgrate:export
-  # run: poetry run python ./Migrations/runner.py
-  # run: bundle exec rake flowgrate:dump
   # run: docker compose exec sdk dotnet run --project /migrations
+
+  # Custom make templates (optional, for third-party SDKs):
+  # stubs: ./my-stubs    # directory with create.tmpl, blank.tmpl, etc.
+  # file_ext: .rb        # file extension for generated migration files
 ```
 
-If `run` is not set, the CLI falls back to built-in defaults:
+If `run` is not set, the CLI uses built-in defaults:
 - `sdk: csharp` → `dotnet run --project {project}`
 - `sdk: python` → `python {project}`
+- Any other value → `run` is required
 
 ---
 
@@ -65,11 +70,11 @@ Each migration outputs **one JSON object** to stdout. Multiple migrations = mult
 }
 ```
 
-| Field       | Type              | Description                                      |
-|-------------|-------------------|--------------------------------------------------|
-| `migration` | `string`          | Filename without extension (timestamp + name)    |
-| `up`        | `Operation[]`     | Operations to apply the migration                |
-| `down`      | `Operation[]`     | Operations to roll back the migration            |
+| Field       | Type          | Description                                   |
+|-------------|---------------|-----------------------------------------------|
+| `migration` | `string`      | Filename without extension (timestamp + name) |
+| `up`        | `Operation[]` | Operations to apply the migration             |
+| `down`      | `Operation[]` | Operations to roll back the migration         |
 
 ### Migration name format
 
@@ -119,9 +124,9 @@ Each column in an `alter_table` operation must have a `column_action` field (`"a
 }
 ```
 
-| Field       | Type      | Default  | Description                         |
-|-------------|-----------|----------|-------------------------------------|
-| `if_exists` | `boolean` | `false`  | Emit `DROP TABLE IF EXISTS`         |
+| Field       | Type      | Default | Description                 |
+|-------------|-----------|---------|------------------------------|
+| `if_exists` | `boolean` | `false` | Emit `DROP TABLE IF EXISTS` |
 
 ---
 
@@ -144,20 +149,20 @@ Each column in an `alter_table` operation must have a `column_action` field (`"a
 }
 ```
 
-| Field                | Type      | Default   | Description                                                     |
-|----------------------|-----------|-----------|-----------------------------------------------------------------|
-| `name`               | `string`  | required  | Column name                                                     |
-| `type`               | `string`  | required  | Canonical type (see table below)                                |
-| `column_action`      | `string`  | `"add"`   | `add` / `change` / `drop` — only used in `alter_table`          |
-| `length`             | `int`     | —         | For `string` type (default 255)                                 |
-| `precision`          | `int`     | —         | For `decimal` type                                              |
-| `scale`              | `int`     | —         | For `decimal` type                                              |
-| `nullable`           | `bool`    | `false`   | Allow NULL                                                      |
-| `primary`            | `bool`    | `false`   | PRIMARY KEY                                                     |
-| `auto_increment`     | `bool`    | `false`   | Auto-incrementing PK (SERIAL / BIGSERIAL)                       |
-| `default`            | `any`     | —         | Literal default value (string, number, boolean)                 |
-| `default_expression` | `string`  | —         | Raw SQL expression default — emitted verbatim (e.g. `NOW()`)   |
-| `comment`            | `string`  | —         | Column comment                                                  |
+| Field                | Type     | Default  | Description                                                    |
+|----------------------|----------|----------|----------------------------------------------------------------|
+| `name`               | `string` | required | Column name                                                    |
+| `type`               | `string` | required | Canonical type (see table below)                               |
+| `column_action`      | `string` | `"add"`  | `add` / `change` / `drop` — only used in `alter_table`         |
+| `length`             | `int`    | —        | For `string` type (default 255)                                |
+| `precision`          | `int`    | —        | For `decimal` type                                             |
+| `scale`              | `int`    | —        | For `decimal` type                                             |
+| `nullable`           | `bool`   | `false`  | Allow NULL                                                     |
+| `primary`            | `bool`   | `false`  | PRIMARY KEY                                                    |
+| `auto_increment`     | `bool`   | `false`  | Auto-incrementing PK                                           |
+| `default`            | `any`    | —        | Literal default value (string, number, boolean)                |
+| `default_expression` | `string` | —        | Raw SQL expression default — emitted verbatim (e.g. `NOW()`)  |
+| `comment`            | `string` | —        | Column comment                                                 |
 
 > **`default` vs `default_expression`**: use `default` for literal values (`"active"`, `true`, `0`). Use `default_expression` for SQL function calls (`gen_random_uuid()`, `NOW()`). Never set both.
 
@@ -165,26 +170,26 @@ Each column in an `alter_table` operation must have a `column_action` field (`"a
 
 ## Column types
 
-These are canonical type names. Each database adapter maps them to its native type.
+Canonical type names mapped to each database adapter's native type:
 
-| Manifest type   | PostgreSQL         | Description                              |
-|-----------------|--------------------|------------------------------------------|
-| `string`        | `VARCHAR(n)`       | Variable-length string, `length` sets n  |
-| `text`          | `TEXT`             | Unlimited text                           |
-| `small_integer` | `SMALLINT`         | 2-byte integer                           |
-| `integer`       | `INTEGER`          | 4-byte integer                           |
-| `big_integer`   | `BIGINT`/`BIGSERIAL` | 8-byte integer; BIGSERIAL if `auto_increment` |
-| `decimal`       | `NUMERIC(p, s)`    | Exact numeric, requires `precision`+`scale` |
-| `float`         | `REAL`             | 4-byte floating point                    |
-| `double`        | `DOUBLE PRECISION` | 8-byte floating point                    |
-| `boolean`       | `BOOLEAN`          |                                          |
-| `date`          | `DATE`             |                                          |
-| `time`          | `TIME`             |                                          |
-| `timestamp`     | `TIMESTAMP`        |                                          |
-| `uuid`          | `UUID`             |                                          |
-| `json`          | `JSON`             |                                          |
-| `jsonb`         | `JSONB`            | PostgreSQL only — binary JSON            |
-| `binary`        | `BYTEA`            | Raw binary data                          |
+| Manifest type   | PostgreSQL           | MySQL          | SQLite    | Description                                    |
+|-----------------|----------------------|----------------|-----------|------------------------------------------------|
+| `string`        | `VARCHAR(n)`         | `VARCHAR(n)`   | `TEXT`    | Variable-length string; `length` sets n        |
+| `text`          | `TEXT`               | `LONGTEXT`     | `TEXT`    | Unlimited text                                 |
+| `small_integer` | `SMALLINT`           | `SMALLINT`     | `INTEGER` | 2-byte integer                                 |
+| `integer`       | `INTEGER`            | `INT`          | `INTEGER` | 4-byte integer                                 |
+| `big_integer`   | `BIGINT`/`BIGSERIAL` | `BIGINT`       | `INTEGER` | 8-byte integer; auto-serial if `auto_increment`|
+| `decimal`       | `NUMERIC(p, s)`      | `DECIMAL(p, s)`| `REAL`    | Exact numeric; requires `precision` + `scale`  |
+| `float`         | `REAL`               | `FLOAT`        | `REAL`    | 4-byte floating point                          |
+| `double`        | `DOUBLE PRECISION`   | `DOUBLE`       | `REAL`    | 8-byte floating point                          |
+| `boolean`       | `BOOLEAN`            | `TINYINT(1)`   | `INTEGER` | Boolean; MySQL/SQLite use 1/0                  |
+| `date`          | `DATE`               | `DATE`         | `TEXT`    | Date only                                      |
+| `time`          | `TIME`               | `TIME`         | `TEXT`    | Time only                                      |
+| `timestamp`     | `TIMESTAMP`          | `DATETIME`     | `TEXT`    | Date and time                                  |
+| `uuid`          | `UUID`               | `CHAR(36)`     | `TEXT`    | UUID; use `generated_uuid` for auto-generation |
+| `json`          | `JSON`               | `JSON`         | `TEXT`    | JSON data                                      |
+| `jsonb`         | `JSONB`              | `JSON`         | `TEXT`    | Binary JSON (PostgreSQL only; others fall back)|
+| `binary`        | `BYTEA`              | `LONGBLOB`     | `BLOB`    | Raw binary data                                |
 
 ---
 
@@ -198,11 +203,11 @@ These are canonical type names. Each database adapter maps them to its native ty
 }
 ```
 
-| Field     | Type       | Default | Description                                              |
-|-----------|------------|---------|----------------------------------------------------------|
-| `columns` | `string[]` | required | Column names in the index                               |
-| `unique`  | `bool`     | `false` | UNIQUE constraint                                        |
-| `name`    | `string`   | —       | Custom index name (auto-generated from table+columns if omitted) |
+| Field     | Type       | Default  | Description                                                      |
+|-----------|------------|----------|------------------------------------------------------------------|
+| `columns` | `string[]` | required | Column names in the index                                        |
+| `unique`  | `bool`     | `false`  | UNIQUE constraint                                                |
+| `name`    | `string`   | —        | Custom index name (auto-generated from table+columns if omitted) |
 
 ---
 
@@ -218,13 +223,13 @@ These are canonical type names. Each database adapter maps them to its native ty
 }
 ```
 
-| Field               | Type     | Default | Description                          |
-|---------------------|----------|---------|--------------------------------------|
-| `column`            | `string` | required | The FK column in this table         |
-| `references_table`  | `string` | required | Referenced table                    |
-| `references_column` | `string` | `"id"`  | Referenced column                    |
-| `on_update`         | `string` | —       | `cascade` / `set null` / `restrict`  |
-| `on_delete`         | `string` | —       | `cascade` / `set null` / `restrict`  |
+| Field               | Type     | Default  | Description                          |
+|---------------------|----------|----------|--------------------------------------|
+| `column`            | `string` | required | The FK column in this table          |
+| `references_table`  | `string` | required | Referenced table                     |
+| `references_column` | `string` | `"id"`   | Referenced column                    |
+| `on_update`         | `string` | —        | `cascade` / `set null` / `restrict`  |
+| `on_delete`         | `string` | —        | `cascade` / `set null` / `restrict`  |
 
 ---
 
@@ -277,9 +282,10 @@ To implement Flowgrate for a new language:
 3. **Discover all migrations** via reflection, file scanning, or explicit registration — sorted by filename (timestamp prefix ensures order).
 4. **Serialize to JSON** following this spec and write each manifest to **stdout** as a JSON object.
 
-The CLI reads your output via stdin:
+The CLI reads your output via stdin or by invoking your runner directly:
 ```bash
-your-sdk-runner | flowgrate up
+your-sdk-runner | flowgrate up   # piped
+flowgrate up                     # via migrations.run in flowgrate.yml
 ```
 
 ### SDK requirements checklist
@@ -287,11 +293,40 @@ your-sdk-runner | flowgrate up
 - [ ] Invocable via a single shell command (configurable in `migrations.run`)
 - [ ] Outputs one JSON object per migration to stdout
 - [ ] Migrations are ordered by the timestamp in their filename
-- [ ] All canonical column types are supported
-- [ ] `default` and `default_expression` are kept separate
-- [ ] `column_action` is set correctly for `alter_table` operations
-- [ ] `if_exists` is set on `drop_table` when using DropIfExists equivalent
+- [ ] All 15 canonical column types are supported
+- [ ] `default` and `default_expression` are kept strictly separate
+- [ ] `column_action` is set for all columns in `alter_table` operations
+- [ ] `if_exists` is set on `drop_table` when using a DropIfExists equivalent
+
+### `make` template support (optional)
+
+If you want `flowgrate make` to generate files for your SDK, provide a `stubs` directory with Go `text/template` files:
+
+```
+my-sdk-stubs/
+  create.tmpl
+  drop_table.tmpl
+  add_column.tmpl
+  change_column.tmpl
+  drop_column.tmpl
+  blank.tmpl
+```
+
+Available template variables: `{{.ClassName}}`, `{{.Table}}`, `{{.Column}}`, `{{.Version}}`, `{{.Namespace}}`.
+
+Configure in `flowgrate.yml`:
+
+```yaml
+migrations:
+  sdk: my-sdk
+  run: my-sdk-runner
+  stubs: ./path/to/my-sdk-stubs
+  file_ext: .ext
+```
+
+If `stubs` is not set, `flowgrate make` falls back to generating a `.migration` JSON skeleton.
 
 ### Reference implementations
 
 - **C#**: [github.com/flowgrate/dotnet](https://github.com/flowgrate/dotnet)
+- **Python**: [github.com/flowgrate/python](https://github.com/flowgrate/python)
